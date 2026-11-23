@@ -14,6 +14,7 @@
 /deploy/*
 !/deploy/activate.sh
 !/deploy/publish.ps1
+!/deploy/upload-release.mjs
 !/deploy/publish.example.json
 
 !/server/

@@ -24,6 +24,7 @@ flock -n 9 || { echo 'A release is already in progress' >&2; exit 3; }
 
 stage=$(mktemp -d "$state/upload.XXXXXXXX")
 candidate= probe= backup= old= draining=0 rollback=0 started=0
+phase=upload
 point_current() {
   ln -s -- "$1" "$stage/current"
   mv -Tf -- "$stage/current" "$root/current"
@@ -31,6 +32,7 @@ point_current() {
 cleanup() {
   code=$?
   trap - EXIT HUP INT TERM
+  if ((code)); then echo "Release failed during $phase." >&2; fi
   if ((rollback)); then
     echo 'Activation failed; restoring the previous release.' >&2
     if ((started)); then
@@ -63,7 +65,8 @@ trap 'exit 130' INT
 trap 'exit 143' TERM
 
 cat >"$stage/archive.tar.gz"
-printf '%s  %s\n' "$expected" "$stage/archive.tar.gz" | sha256sum --check --status
+phase='archive verification'
+printf '%s  %s\n' "$expected" "$stage/archive.tar.gz" | sha256sum --check --quiet
 mkdir "$stage/payload"
 metadata=$(python3 - "$stage/archive.tar.gz" "$stage/payload" <<'PY'
 import json
@@ -112,6 +115,7 @@ chmod -R g+rX,o-rwx "$candidate"
 chmod 750 "$candidate/authority/CrawlServer.x86_64"
 
 probe=$(mktemp -d "$stage/probe.XXXXXXXX")
+phase='isolated startup'
 chmod 711 "$stage"
 chown crawl-online:crawl-online "$probe"
 runuser -u crawl-online -- timeout 20 "$root/runtime/node" --input-type=module - "$candidate" "$probe" "$content" <<'NODE'
@@ -134,6 +138,7 @@ if [[ $action == check ]]; then
 fi
 
 old=$(readlink "$root/current")
+phase='drain'
 if [[ -f $root/current/release.json ]] && cmp -s "$root/current/release.json" "$candidate/release.json"; then
   echo "Release $commit is already installed."
   exit 0
@@ -152,6 +157,7 @@ for attempt in {0..180}; do
   sleep 5
 done
 touch "$matches/.deploy-switch"
+phase='data backup'
 rollback=1
 systemctl stop crawl-online
 
@@ -170,6 +176,7 @@ with sqlite3.connect(backup.as_uri()+'?mode=ro', uri=True) as db:
         raise SystemExit('Leaderboard backup failed its integrity check')
 PY
 diff -qr -- "$progress" "$backup/progress"
+phase='activation'
 point_current "$candidate"
 started=1
 systemctl start crawl-online

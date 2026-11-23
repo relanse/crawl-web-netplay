@@ -1,7 +1,8 @@
 #requires -Version 5.1
 param(
     [string]$Config = (Join-Path $PSScriptRoot 'publish.local.json'),
-    [switch]$Check
+    [switch]$Check,
+    [switch]$Resume
 )
 $ErrorActionPreference = 'Stop'
 $repo = Split-Path $PSScriptRoot -Parent
@@ -10,26 +11,6 @@ function Invoke-Checked {
     param([string]$Program, [string[]]$Arguments)
     & $Program @Arguments
     if ($LASTEXITCODE -ne 0) { throw "$Program exited with code $LASTEXITCODE." }
-}
-
-function Send-Release {
-    param([string]$Archive, [string[]]$SshArguments, [string]$Command)
-    $start = [Diagnostics.ProcessStartInfo]::new('ssh.exe')
-    $start.UseShellExecute = $false
-    $start.RedirectStandardInput = $true
-    $start.Arguments = (($SshArguments + @($Command)) | ForEach-Object { '"' + $_ + '"' }) -join ' '
-    $process = [Diagnostics.Process]::Start($start)
-    try {
-        $inputFile = [IO.File]::OpenRead($Archive)
-        $pipe = $process.StandardInput.BaseStream
-        try { $inputFile.CopyTo($pipe) }
-        finally {
-            $inputFile.Dispose()
-            $pipe.Dispose()
-        }
-        $process.WaitForExit()
-        if ($process.ExitCode -ne 0) { throw "The server rejected the release (SSH exit $($process.ExitCode))." }
-    } finally { $process.Dispose() }
 }
 
 if (!(Test-Path -LiteralPath $Config -PathType Leaf)) { throw 'Missing deploy/publish.local.json. See deploy/publish.example.json.' }
@@ -59,45 +40,56 @@ try {
     $buildRoot = Join-Path $repo 'analysis/netplay'
     New-Item -ItemType Directory -Path $buildRoot -Force | Out-Null
     $releaseLock = [IO.File]::Open((Join-Path $buildRoot 'release.lock'), 'OpenOrCreate', 'ReadWrite', 'None')
-    $workspace = Join-Path $buildRoot ('publish-' + [guid]::NewGuid().ToString('N'))
-    $package = Join-Path $workspace 'package'
-    New-Item -ItemType Directory -Path $package -Force | Out-Null
-
     $commit = Invoke-Checked git @('rev-parse','HEAD')
     Invoke-Checked git @('push','origin','main')
     $published = Invoke-Checked git @('ls-remote','--heads','origin','refs/heads/main')
     if (($published -split '\s+')[0] -ne $commit) { throw 'GitHub main does not match this build.' }
 
-    $sourceArchive = Join-Path $workspace 'source.tar'
-    Invoke-Checked git @('archive','--format=tar','-o',$sourceArchive,$commit,'server','site')
-    Invoke-Checked tar.exe @('-xf',$sourceArchive,'-C',$package)
-    Push-Location (Join-Path $package 'server')
-    try {
-        Invoke-Checked npm.cmd @('ci','--omit=dev','--ignore-scripts','--bin-links=false','--no-audit','--no-fund')
-        Invoke-Checked npm.cmd @('test')
-    } finally { Pop-Location }
+    $archive = Join-Path $buildRoot "pending-$commit.tar.gz"
+    if ($Resume) {
+        if (!(Test-Path -LiteralPath $archive -PathType Leaf)) { throw 'There is no pending release for this commit.' }
+    } else {
+        $workspace = Join-Path $buildRoot ('publish-' + [guid]::NewGuid().ToString('N'))
+        $package = Join-Path $workspace 'package'
+        New-Item -ItemType Directory -Path $package -Force | Out-Null
+        $sourceArchive = Join-Path $workspace 'source.tar'
+        Invoke-Checked git @('archive','--format=tar','-o',$sourceArchive,$commit,'server','site')
+        Invoke-Checked tar.exe @('-xf',$sourceArchive,'-C',$package)
+        Push-Location (Join-Path $package 'server')
+        try {
+            Invoke-Checked npm.cmd @('ci','--omit=dev','--ignore-scripts','--bin-links=false','--no-audit','--no-fund')
+            Invoke-Checked npm.cmd @('test')
+        } finally { Pop-Location }
 
-    $authority = Join-Path $package 'authority'
-    $client = Join-Path $package 'client'
-    & (Join-Path $repo 'run-netplay-build.ps1') -Mode linux -OutputDirectory $authority -Wait
-    & (Join-Path $repo 'run-netplay-build.ps1') -Mode client -OutputDirectory $client -Wait
-    $native = Get-Content -LiteralPath (Join-Path $authority 'build-report.json') -Raw | ConvertFrom-Json
-    $web = Get-Content -LiteralPath (Join-Path $client 'client-build.json') -Raw | ConvertFrom-Json
-    if ($native.kind -ne 'authority' -or $native.result -ne 'Succeeded' -or $web.kind -ne 'client' -or
-        $native.contentHash -notmatch '^[a-f0-9]{64}$' -or $native.contentHash -ne $web.contentHash) {
-        throw 'The Linux build and WebGL build do not match.'
+        $authority = Join-Path $package 'authority'
+        $client = Join-Path $package 'client'
+        & (Join-Path $repo 'run-netplay-build.ps1') -Mode linux -OutputDirectory $authority -Wait
+        & (Join-Path $repo 'run-netplay-build.ps1') -Mode client -OutputDirectory $client -Wait
+        $native = Get-Content -LiteralPath (Join-Path $authority 'build-report.json') -Raw | ConvertFrom-Json
+        $web = Get-Content -LiteralPath (Join-Path $client 'client-build.json') -Raw | ConvertFrom-Json
+        if ($native.kind -ne 'authority' -or $native.result -ne 'Succeeded' -or $web.kind -ne 'client' -or
+            $native.contentHash -notmatch '^[a-f0-9]{64}$' -or $native.contentHash -ne $web.contentHash) {
+            throw 'The Linux build and WebGL build do not match.'
+        }
+        if ((Invoke-Checked git @('rev-parse','HEAD')) -ne $commit -or (Invoke-Checked git @('status','--porcelain'))) {
+            throw 'Tracked source changed during the build.'
+        }
+        $manifest = [ordered]@{version=1; commit=$commit; contentHash=$native.contentHash} | ConvertTo-Json -Compress
+        [IO.File]::WriteAllText((Join-Path $package 'release.json'), $manifest, [Text.UTF8Encoding]::new($false))
+        $builtArchive = Join-Path $workspace 'release.tar.gz'
+        Invoke-Checked tar.exe @('-czf',$builtArchive,'-C',$package,'release.json','authority','client','server')
+        Move-Item -LiteralPath $builtArchive -Destination $archive -Force
     }
-    if ((Invoke-Checked git @('rev-parse','HEAD')) -ne $commit -or (Invoke-Checked git @('status','--porcelain'))) {
-        throw 'Tracked source changed during the build.'
-    }
-    $manifest = [ordered]@{version=1; commit=$commit; contentHash=$native.contentHash} | ConvertTo-Json -Compress
-    [IO.File]::WriteAllText((Join-Path $package 'release.json'), $manifest, [Text.UTF8Encoding]::new($false))
-    $archive = Join-Path $workspace 'release.tar.gz'
-    Invoke-Checked tar.exe @('-czf',$archive,'-C',$package,'release.json','authority','client','server')
     $digest = (Get-FileHash -LiteralPath $archive -Algorithm SHA256).Hash.ToLowerInvariant()
     $action = if ($Check) { 'check' } else { 'publish' }
     Write-Host "Uploading $($commit.Substring(0, 12)) to $($settings.host)."
-    Send-Release -Archive $archive -SshArguments $sshArguments -Command "$action $digest"
+    try {
+        Invoke-Checked node (@((Join-Path $PSScriptRoot 'upload-release.mjs'),$archive) + $sshArguments + @("$action $digest"))
+    } catch {
+        Write-Host 'Release package retained. Run with -Resume to retry for this commit.'
+        throw
+    }
+    if (!$Check) { Remove-Item -LiteralPath $archive }
 } finally {
     if ($workspace -and (Test-Path -LiteralPath $workspace)) {
         $resolved = (Resolve-Path -LiteralPath $workspace).Path

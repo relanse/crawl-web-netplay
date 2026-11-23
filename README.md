@@ -47,6 +47,8 @@ npm test
 
 在原有 Windows 工程里提交改动，然后双击 `发布广州.cmd`。发布入口推送 `main` 到私有仓库，运行 Node.js 测试，从本机 Unity 工程构建 Linux 服务端和 WebGL 客户端，再经 SSH 发送同一份发布包。执行 `发布广州.cmd -Check` 可在服务器用独立数据验证发布包。
 
+上传或切换失败时，`发布广州.cmd -Resume` 可重新发送当前提交已经构建好的发布包。
+
 服务器先验证归档校验和、配对构建和大厅健康状态。发布时暂停新开局，等待在玩的对局结束，最多等约 15 分钟。切换期间会完整备份 `.progress`，校验 SQLite 数据库，再切换程序版本。启动检查失败时自动恢复到上一版程序和启动前的存档状态。
 
 本机连接配置在 `deploy/publish.local.json`，结构见 `deploy/publish.example.json`。发布密钥保存在 Windows 用户的 `.ssh` 中，在广州服务器上只能调用发布命令。服务器的联机数据始终保存在 `/var/lib/crawl-online/matches`，发布备份在 `/var/backups/crawl-online`。
