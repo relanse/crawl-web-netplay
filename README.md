@@ -45,7 +45,7 @@ npm test
 
 ## 发布到广州
 
-在原有 Windows 工程里提交改动，然后双击 `发布广州.cmd`。发布入口推送 `main` 到私有仓库，运行 Node.js 测试，从本机 Unity 工程构建 Linux 服务端和 WebGL 客户端，再经 SSH 发送同一份发布包。执行 `发布广州.cmd -Check` 可在服务器用独立数据验证发布包。
+在原有 Windows 工程里提交改动，然后双击 `发布广州.cmd`。发布入口推送 `main` 到 GitHub，运行 Node.js 测试，从本机 Unity 工程构建 Linux 服务端和 WebGL 客户端，再经 SSH 发送同一份发布包。执行 `发布广州.cmd -Check` 可在服务器用独立数据验证发布包。
 
 上传或切换失败时，`发布广州.cmd -Resume` 可重新发送当前提交已经构建好的发布包。
 
