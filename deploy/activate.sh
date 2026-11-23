@@ -137,7 +137,11 @@ if [[ $action == check ]]; then
   exit 0
 fi
 
-old=$(readlink "$root/current")
+systemctl show -p ExecStart --value crawl-online | grep -F -- ' --preserve-symlinks-main ' >/dev/null || {
+  echo 'The active service configuration needs deploy/crawl-online-publish.conf.' >&2
+  exit 1
+}
+old=$(readlink -f "$root/current")
 phase='drain'
 if [[ -f $root/current/release.json ]] && cmp -s "$root/current/release.json" "$candidate/release.json"; then
   echo "Release $commit is already installed."

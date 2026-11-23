@@ -13,6 +13,7 @@
 !/deploy/
 /deploy/*
 !/deploy/activate.sh
+!/deploy/crawl-online-publish.conf
 !/deploy/publish.ps1
 !/deploy/upload-release.mjs
 !/deploy/publish.example.json
