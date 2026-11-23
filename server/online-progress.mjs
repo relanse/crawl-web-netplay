@@ -5,6 +5,13 @@ import path from 'node:path';
 export const guestLifetimeMs=365*24*60*60*1000;
 
 const validAmount=value=>Number.isSafeInteger(value)&&value>=0&&value<=0x7fffffff;
+const standingsOrder=new Map([
+  ['overall','bossKills DESC,bestLevel DESC,heroKills DESC,completed DESC'],
+  ['bossKills','bossKills DESC,CAST(bossKills AS REAL)/completed DESC,bestLevel DESC'],
+  ['bestLevel','bestLevel DESC,xp DESC,bossKills DESC'],
+  ['heroKills','heroKills DESC,bossKills DESC,completed DESC'],
+  ['xp','xp DESC,bestLevel DESC,completed DESC']
+]);
 const matchPlayerColumns=`
   p.player_id AS playerId, p.slot, p.nickname, p.tag, p.level, p.xp,
   p.hero_kills AS heroKills, p.monster_kills AS monsterKills,
@@ -109,10 +116,12 @@ export class OnlineProgress {
     return match;
   }
 
-  overview(playerId){
+  overview(playerId,sort='overall'){
+    const order=standingsOrder.get(sort);
+    if(!order)throw Error('INVALID_STANDINGS_SORT');
     const self=this.db.prepare('SELECT * FROM standings WHERE playerId=?').get(playerId)??null;
     const leaderboard=this.db.prepare(`
-      SELECT * FROM standings ORDER BY bossKills DESC,bestLevel DESC,heroKills DESC,completed DESC,playerId LIMIT 20
+      SELECT * FROM standings ORDER BY ${order},playerId LIMIT 20
     `).all();
     const recent=this.db.prepare(`
       SELECT m.match_id AS matchId, m.completed_at AS completedAt, m.duration_seconds AS durationSeconds,

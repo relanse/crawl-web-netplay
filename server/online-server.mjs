@@ -140,7 +140,10 @@ export async function createOnlineServer(options={}){
         const who=identity(req);if(!who){json(res,401,{code:'AUTH_REQUIRED'});return;}
         const playerId=who.playerId;
         if(req.method==='GET'&&url.pathname==='/api/state'){json(res,200,state(playerId));return;}
-        if(req.method==='GET'&&url.pathname==='/api/progress'){json(res,200,progress.overview(playerId));return;}
+        if(req.method==='GET'&&url.pathname==='/api/progress'){
+          json(res,200,progress.overview(playerId,url.searchParams.get('sort')??'overall'));
+          return;
+        }
         if(req.method==='GET'&&url.pathname==='/api/client'){json(res,200,{...clientBuild,base:'/client/'+contentHash+'/'});return;}
         if(req.method!=='POST')throw Error('NOT_FOUND');
         const request=await body(req);let room=findRoom(playerId);

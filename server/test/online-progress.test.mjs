@@ -4,6 +4,7 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import {createOnlineServer} from '../online-server.mjs';
+import {OnlineProgress} from '../online-progress.mjs';
 
 test('official settlement updates history and rankings once and survives an online server restart',async()=>{
   const directory=await fs.mkdtemp(path.join(os.tmpdir(),'crawl-online-progress-'));
@@ -86,6 +87,41 @@ test('official settlement updates history and rankings once and survives an onli
     assert.equal((await request('progress',stranger.cookies)).value.self,null);
   }finally{
     if(app)await app.close();
+    await fs.rm(directory,{recursive:true,force:true});
+  }
+});
+
+test('each leaderboard ranks the full player pool before limiting it to 20',async()=>{
+  const directory=await fs.mkdtemp(path.join(os.tmpdir(),'crawl-standings-'));
+  const progress=new OnlineProgress(directory);
+  const id=n=>n.toString(16).padStart(32,'0');
+  const member=(n,slot)=>({slot,playerId:id(n),nickname:'Player '+n,tag:'TST'});
+  const stats=(slot,level,xp,heroKills)=>({slot,level,xp,heroKills,monsterKills:1,abandoned:false});
+  const best=id(21);
+  try{
+    for(let n=1;n<=22;n++){
+      progress.saveGuest({playerId:id(n),digest:n.toString(16).padStart(64,'0'),expires:Date.now()+60000});
+    }
+    for(let n=1;n<=21;n++){
+      progress.recordMatch(id(n),[member(n,0),member(22,1)],{
+        completed:true,bossDefeated:n!==21,winnerSlot:n===21?-1:0,durationSeconds:120,
+        players:[stats(0,n===21?99:n,n===21?99999:n,n===21?999:n),stats(1,1,0,0)]
+      });
+    }
+    const overall=progress.overview(best);
+    assert.equal(overall.leaderboard.length,20);
+    assert.equal(overall.leaderboard.some(row=>row.playerId===best),false);
+    assert.equal(progress.overview(best,'bossKills').leaderboard[0].playerId,id(20));
+    for(const sort of ['bestLevel','heroKills','xp']){
+      const result=progress.overview(best,sort);
+      assert.equal(result.leaderboard.length,20);
+      assert.equal(result.leaderboard[0].playerId,best);
+      assert.deepEqual(result.self,overall.self);
+      assert.deepEqual(result.recent,overall.recent);
+    }
+    assert.throws(()=>progress.overview(best,'toString'),/INVALID_STANDINGS_SORT/);
+  }finally{
+    progress.close();
     await fs.rm(directory,{recursive:true,force:true});
   }
 });
