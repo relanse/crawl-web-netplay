@@ -107,7 +107,9 @@ PY
 read -r commit content <<<"$metadata"
 candidate=$(mktemp -d "$state/releases/${commit:0:12}.XXXXXXXX")
 mv -- "$stage/payload/"* "$candidate/"
-chmod 755 "$candidate" "$candidate/authority/CrawlServer.x86_64"
+chgrp -R crawl-online "$candidate"
+chmod -R g+rX,o-rwx "$candidate"
+chmod 750 "$candidate/authority/CrawlServer.x86_64"
 
 probe=$(mktemp -d "$stage/probe.XXXXXXXX")
 chmod 711 "$stage"
