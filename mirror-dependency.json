@@ -1,0 +1,11 @@
+{
+  "name": "Mirror Networking",
+  "version": "96.11.4",
+  "source": "https://github.com/MirrorNetworking/Mirror/releases/download/v96.11.4/Mirror-96.11.4.unitypackage",
+  "archiveSha256": "4427a467304a61396be219a4f05977fcbf31014ee33989e850c5979a31c7c31d",
+  "license": "MIT; see web-project/Assets/Mirror/LICENSE",
+  "included": ["Core", "CompilerSymbols", "Components", "Editor", "Plugins", "Transports", "Authenticators"],
+  "excluded": ["Examples", "Hosting", "Presets", "ScriptTemplates"],
+  "localPatch": "SimpleWebTransport.serverBindAddress forwards an optional IPAddress to SimpleWebServer.Start / WebSocketServer.Listen. Default null preserves upstream behavior. Crawl sets loopback so only its local reverse proxy reaches the game listener.",
+  "verification": "Editor compilation and Weaver passed in unity-storage-20261112-000208.log. Native/WebGL transport execution is a separate gate."
+}

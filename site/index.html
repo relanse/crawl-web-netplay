@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="description" content="Crawl 中文网页版，与朋友在私人房间中争夺英雄之位。">
+  <title>Crawl · 地牢会客厅</title><link rel="icon" href="data:,"><link rel="stylesheet" href="game.css">
+</head>
+<body>
+  <main>
+    <header class="site-header">
+      <a class="brand" href="/" aria-label="Crawl 首页"><span class="brand-sigil" aria-hidden="true">✦</span><span>CRAWL<small>地牢会客厅</small></span></a>
+      <p class="header-note">朋友在身边，敌人在地牢。</p>
+      <span class="private-label"><i></i> 密钥邀请 · 私人联机</span>
+    </header>
+    <div class="workspace">
+      <div class="play-column">
+        <div class="stage-toolbar"><span><i class="live-dot"></i> <span id="play-mode">本地游玩</span></span><button id="fullscreen" class="quiet" disabled>⛶ 全屏游玩</button></div>
+        <section class="game" aria-label="游戏画面">
+          <canvas id="unity-canvas" width="1280" height="720" tabindex="0" aria-label="鼠标指向移动，左键攻击，右键技能"></canvas>
+          <video id="online-video" autoplay playsinline muted tabindex="0" hidden aria-label="联机游戏画面"></video>
+          <div id="loading" class="loading">
+            <span class="dungeon-sigil" aria-hidden="true">✦</span><p class="eyebrow">地牢之下 · 谁是英雄</p>
+            <h1>CRAWL</h1><p class="intro-copy">并肩进入，互为敌手。<br>夺回肉身，成为最后走出地牢的人。</p>
+            <p id="status" role="status">独自探索，或邀请朋友加入右侧的私人房间。</p>
+            <progress id="progress" max="100" value="0" aria-label="游戏加载进度"></progress>
+            <button id="start" class="primary">进入本地地牢 <span aria-hidden="true">→</span></button>
+            <p class="local-hint">保留单人序章与本地多人 · 中文界面 / 英文配音</p>
+            <p id="error" role="alert" hidden></p>
+          </div>
+          <section id="web-lobby" class="web-lobby" hidden aria-label="联机选人大厅">
+            <div class="lobby-heading"><div><p class="eyebrow">私人房间</p><h2 id="lobby-title">集结你的对手</h2></div><span id="lobby-count" class="count-badge">0 / 4</span></div>
+            <p id="lobby-hint" class="lobby-hint">选好信仰，准备进入地牢。</p>
+            <div id="lobby-seats" class="lobby-seats"></div>
+            <div class="lobby-bottom"><span id="lobby-progress">等待朋友加入</span><span>2–4 人对战</span></div>
+          </section>
+        </section>
+        <div class="control-strip"><span><kbd>鼠标</kbd> 指向移动</span><span><kbd>左键</kbd> 攻击</span><span><kbd>右键</kbd> 技能</span><span><kbd>中键 / Esc</kbd> 暂停</span></div>
+        <details class="help-panel"><summary>操作说明与存档</summary><p>鼠标移到角色附近或移出画面即可停止。也可使用方向键 / WASD 移动，X / 空格攻击，Z 返回或技能，Enter 开始。支持标准手柄。</p><p>联机时，切出窗口会停止你的输入，不会暂停其他人。本地进度存于当前浏览器，联机进度存于服务器；正在进行的对局不会保存为断点存档。</p></details>
+      </div>
+      <aside class="room-column">
+        <details id="online-panel" class="online-panel" open>
+          <summary><span>好友联机</span><small>最多 4 人</small></summary>
+          <p class="room-intro" id="room-intro">把网址与密钥交给朋友，<br>在同一个房间里见。</p>
+          <form id="online-form">
+            <label>你的昵称<input id="online-name" maxlength="16" autocomplete="nickname" placeholder="朋友怎么称呼你？"></label>
+            <label>联机密钥<input id="online-key" type="password" autocomplete="off" minlength="16" maxlength="256" required placeholder="输入房主提供的密钥"></label>
+            <button id="online-join" type="submit" class="primary">加入私人房间 <span aria-hidden="true">→</span></button>
+          </form>
+          <div id="online-state" role="status" aria-live="polite"></div>
+          <div id="lobby-controls" hidden>
+            <div class="section-label">你的角色 <span id="self-slot"></span></div>
+            <form id="lobby-profile">
+              <div class="identity-fields"><label>昵称<input id="lobby-name" maxlength="16" required></label><label>角色代号<input id="lobby-tag" maxlength="3" minlength="3" pattern="[A-Z0-9]{3}" required aria-describedby="tag-help"></label></div>
+              <p id="tag-help" class="field-hint">3 位字母或数字，用于原版战斗界面与角色档案。</p>
+              <label>初始信仰<select id="lobby-deity"><option value="-1">随机信仰</option></select></label>
+              <p id="deity-description" class="deity-description">由原版从已解锁的信仰中随机选择。</p>
+              <button id="lobby-save" class="secondary" type="submit">保存选择</button>
+            </form>
+            <button id="lobby-ready" class="primary" disabled>我准备好了</button>
+            <button id="lobby-start" class="start-match" hidden disabled>开始对局 →</button>
+            <p id="lobby-start-hint" class="field-hint">等待所有人准备，由房主开始。</p>
+          </div>
+          <div id="online-players" class="player-chips" aria-label="房间玩家"></div>
+          <div id="online-actions" hidden><button id="online-sound" class="quiet">开启声音</button><button id="online-leave" class="quiet danger">退出房间</button></div>
+          <div id="stream-settings" hidden><label>联机画质<select id="online-quality"><option value="auto">自动（推荐）</option><option value="clear">优先画质</option><option value="smooth">流畅优先</option></select></label><p id="stream-status" aria-live="off">正在测量画面…</p></div>
+          <div class="room-footnote"><span aria-hidden="true">◇</span><p>英雄之位靠争夺。<br>信仰决定初始能力与怪物组合。</p></div>
+        </details>
+      </aside>
+    </div>
+    <footer><span>CRAWL <b>·</b> 中文网页版</span><span>一间地牢，四个不太可靠的朋友。</span></footer>
+  </main>
+  <script src="game.js"></script><script src="online.js"></script><script src="lobby.js"></script><script src="stream-policy.js"></script><script src="stream.js"></script>
+</body>
+</html>
