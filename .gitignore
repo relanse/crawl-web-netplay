@@ -9,6 +9,12 @@
 !/audit-netplay.mjs
 !/本机试玩.cmd
 !/停止联机.cmd
+!/发布广州.cmd
+!/deploy/
+/deploy/*
+!/deploy/activate.sh
+!/deploy/publish.ps1
+!/deploy/publish.example.json
 
 !/server/
 /server/*

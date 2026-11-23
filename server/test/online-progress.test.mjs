@@ -41,6 +41,17 @@ test('official settlement updates history and rankings once and survives an onli
       await request('ready',p.cookies,{revision:room.revision,ready:true});
     }
     app.processes.start=async()=>{};
+    const drain=path.join(directory,'matches','.deploy-drain');
+    await fs.writeFile(drain,'');
+    const refused=await fetch(origin+'/api/start',{method:'POST',headers:{
+      cookie:hero.cookies,'Content-Type':'application/json'},body:JSON.stringify({revision:room.revision,requestId:'blocked'})});
+    assert.equal(refused.status,503);
+    assert.equal((await refused.json()).code,'SERVER_UPDATING');
+    assert.equal(room.phase,'Lobby');
+    const draining=await (await fetch(origin+'/health')).json();
+    assert.equal(draining.deployDraining,true);
+    assert.equal(draining.activeMatches,0);
+    await fs.unlink(drain);
     await request('start',hero.cookies,{revision:room.revision,requestId:'progress-1'});
     const {matchId,processLeaseId,ownerId}=room.match;
     assert.equal(ownerId,hero.playerId);

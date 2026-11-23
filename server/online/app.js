@@ -29,6 +29,7 @@ Object.assign(errors,{
   WORLD_CAPTURE_FAILED:'服务器停止了场景同步，请房主返回大厅重新开局。',
   RESYNC_TIMEOUT:'场景同步超时，正在尝试恢复对局。',
   RESYNC_OVERFLOW:'场景数据超过同步上限，请房主重新开局。',
+  SERVER_UPDATING:'服务器正在准备更新，现有对局可继续，新对局稍后开放。',
   RESULT_SAVE_FAILED:'战绩暂未保存，服务器正在重试。'
 });
 function notice(value){$('notice').textContent=errors[value]??value??'';clearTimeout(noticeTimer);if(value)noticeTimer=setTimeout(()=>{$('notice').textContent='';},7000);}

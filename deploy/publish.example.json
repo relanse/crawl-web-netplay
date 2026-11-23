@@ -1,0 +1,6 @@
+{
+  "host": "your-server.example",
+  "user": "root",
+  "identityFile": "~/.ssh/crawl_guangzhou_deploy",
+  "repository": "relanse/crawl-web-netplay"
+}

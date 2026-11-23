@@ -1,6 +1,6 @@
 import http from 'node:http';
 import net from 'node:net';
-import {createReadStream} from 'node:fs';
+import {createReadStream,existsSync} from 'node:fs';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
@@ -31,6 +31,8 @@ export async function createOnlineServer(options={}){
   if(publicOrigin&&new URL(publicOrigin).origin!==publicOrigin)throw Error('INVALID_PUBLIC_ORIGIN');
   if(publicOrigin&&!publicOrigin.startsWith('https:')&&!['localhost','127.0.0.1'].includes(new URL(publicOrigin).hostname))throw Error('HTTPS_REQUIRED');
   const matchDirectory=path.resolve(options.directory??process.env.CRAWL_MATCH_DIRECTORY??path.join(HERE,'online-data/matches'));
+  const drainFile=path.join(matchDirectory,'.deploy-drain');
+  const switchFile=path.join(matchDirectory,'.deploy-switch');
   const progress=new OnlineProgress(path.join(matchDirectory,'.progress'));
   const auth=new GuestAuth({key,store:progress,guestMs:guestLifetimeMs});
   const rooms=new Map(),membership=new Map(),clients=new Map(),proxySockets=new Set();
@@ -121,7 +123,11 @@ export async function createOnlineServer(options={}){
     try{
       const url=new URL(req.url,'http://localhost');
       if(!allowed(req)){json(res,403,{code:'ORIGIN_REFUSED'});return;}
-      if(req.method==='GET'&&url.pathname==='/health'){json(res,200,{ok:true,releaseId,contentHash,mode:'authority'});return;}
+      if(req.method==='GET'&&url.pathname==='/health'){
+        json(res,200,{ok:true,releaseId,contentHash,mode:'authority',deployDraining:existsSync(drainFile),activeMatches:processes?.matches.size??0});
+        return;
+      }
+      if(existsSync(switchFile)){json(res,503,{code:'SERVER_UPDATING'});return;}
       if(req.method==='POST'&&url.pathname==='/api/login'){
         const request=await body(req),existing=cookies(req.headers.cookie);
         const login=auth.login({key:request.key,ip:req.socket.remoteAddress,sessionToken:existing.crawl_net_session,guestToken:existing.crawl_net_guest});
@@ -157,6 +163,7 @@ export async function createOnlineServer(options={}){
             break;
           case '/api/ready':if(!room)throw Error('NOT_A_MEMBER');room.session.ready(playerId,request.revision,request.ready,releaseId,contentHash);break;
           case '/api/start':{
+            if(existsSync(drainFile)){json(res,503,{code:'SERVER_UPDATING'});return;}
             if(!room)throw Error('NOT_A_MEMBER');room.session.start(playerId,request.revision,request.requestId);broadcast();
             try{await processes.start(room.session);}catch(error){if(room.session.phase==='Loading')room.session.cancelLoading(error.message);broadcast();throw error;}break;
           }
@@ -189,6 +196,7 @@ export async function createOnlineServer(options={}){
     }catch(error){if(!res.headersSent)json(res,error.code==='ENOENT'||error.message==='NOT_FOUND'?404:409,{code:error.code??error.message});else res.destroy();}
   });
   server.on('upgrade',(req,socket,head)=>{
+    if(existsSync(switchFile)){socket.end('HTTP/1.1 503 Service Unavailable\r\nConnection: close\r\n\r\n');return;}
     const who=identity(req);if(!who||!req.headers.origin||!allowed(req)){socket.end('HTTP/1.1 403 Forbidden\r\nConnection: close\r\n\r\n');return;}
     if(req.url==='/lobby'){
       if(lobby.clients.size>=128||(clients.get(who.playerId)?.size??0)>=4){socket.end('HTTP/1.1 429 Too Many Requests\r\nConnection: close\r\n\r\n');return;}
